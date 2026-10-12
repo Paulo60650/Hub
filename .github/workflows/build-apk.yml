@@ -1,0 +1,49 @@
+name: Construire l'APK
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:   # bouton « Run workflow » dans l'onglet Actions
+
+permissions:
+  contents: write      # nécessaire pour publier la « release » avec l'APK
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.9
+
+      - name: Compiler l'APK
+        run: gradle :app:assembleDebug --no-daemon --stacktrace
+
+      - name: Renommer l'APK
+        run: cp app/build/outputs/apk/debug/app-debug.apk Hub.apk
+
+      - name: Garder l'APK comme artefact du workflow
+        uses: actions/upload-artifact@v4
+        with:
+          name: Hub-apk
+          path: Hub.apk
+
+      - name: Publier / mettre à jour la release « latest »
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete latest --yes --cleanup-tag --repo "$GITHUB_REPOSITORY" || true
+          gh release create latest Hub.apk \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Hub – dernière version" \
+            --notes "APK construit automatiquement depuis le commit ${GITHUB_SHA::7}."
